@@ -1,250 +1,495 @@
 const { useEffect, useMemo, useRef, useState } = React;
 const Engine = window.CoreWarEngine;
 
-const WARRIOR_LIBRARY = {
-  daredevil: {
-    label: 'DAREDEVIL',
-    code: `;redcode-94b
+const PRESETS = {
+  impVsDwarf: { label: "Imp comentado vs Dwarf comentado", a: `;redcode-94
+;name Imp básico comentado
+;author Entrenamiento Web
+;strategy Recorre el núcleo copiándose una celda adelante.
+ORG inicio                  ; El punto de entrada será la etiqueta inicio.
+inicio  MOV.I 0, 1          ; Copia esta misma instrucción una celda hacia delante.
+END inicio                  ; Indica al ensamblador dónde empieza la ejecución.
+`, b: `;redcode-94
+;name Dwarf básico comentado
+;author Entrenamiento Web
+;strategy Bombardero pequeño que va dejando DAT por el núcleo.
+ORG loop                    ; Empezamos en el bucle del bombardero.
+loop    ADD.AB #4, puntero  ; Avanza el puntero de bombardeo de cuatro en cuatro.
+        MOV.I bomba, @puntero ; Copia la bomba en la dirección apuntada por puntero.
+        JMP loop            ; Repite el ataque una y otra vez.
+puntero DAT.F #0, #20       ; Guarda el desplazamiento actual usado por el bombardeo.
+bomba   DAT.F #0, #0        ; La bomba mortal: si un proceso la ejecuta, muere.
+END loop                    ; Fija el punto de entrada en loop.
+` },
+  silkVsStone: { label: "Silk mini vs Stone mini", a: `;redcode-94
+;name Silk mini
+;author Entrenamiento Web
+;strategy Pequeño replicador que se extiende usando SPL y MOV.
+ORG inicio                  ; Empezamos en la primera copia.
+inicio  SPL 1, <200         ; Crea un proceso extra para acelerar la expansión.
+        MOV.I }-1, >-1      ; Copia instrucciones desde detrás hacia delante.
+        JMP inicio          ; Repite para seguir replicándose.
+END inicio                  ; Entrada del guerrero.
+`, b: `;redcode-94
+;name Stone mini
+;author Entrenamiento Web
+;strategy Stone compacto que bombardea con un paso fijo.
+paso    EQU 97              ; Distancia entre impactos consecutivos.
+ORG ciclo                   ; La ejecución comienza en ciclo.
+puntero DAT.F #0, #100      ; Acumula el desplazamiento del siguiente disparo.
+ciclo   MOV.I bomba, @puntero ; Deposita la bomba en el objetivo indirecto.
+        ADD.AB #paso, puntero ; Mueve el puntero para el próximo disparo.
+        JMP ciclo           ; Repite sin parar.
+bomba   DAT.F #0, #0        ; Bomba letal estándar.
+END ciclo                   ; Punto de entrada.
+` },
+  scannerVsImp: { label: "Scanner mini vs Imp ring", a: `;redcode-94
+;name Scanner mini
+;author Entrenamiento Web
+;strategy Busca actividad y, si la detecta, deja una bomba.
+paso    EQU 24              ; Distancia entre sondeos.
+ORG scan                    ; Arrancamos en la rutina de escaneo.
+scan    SEQ.I paso, paso+6  ; Compara dos celdas separadas para detectar cambios.
+        JMP golpe           ; Si parecen iguales, salta a la rutina de golpeo.
+        ADD.AB #paso, scan  ; Desplaza la ventana de escaneo.
+        JMP scan            ; Vuelve a comprobar.
+golpe   MOV.I bomba, @scan  ; Escribe una bomba donde cree haber encontrado al rival.
+        JMP scan            ; Retoma la búsqueda.
+bomba   DAT.F #0, #0        ; Bomba usada por el scanner.
+END scan                    ; Fin del guerrero.
+`, b: `;redcode-94
+;name Imp ring 2667
+;author Entrenamiento Web
+;strategy Imp clásico con salto de anillo para repartir copias.
+paso    EQU 2667            ; Salto clásico que reparte bien el anillo de 8000 celdas.
+ORG inicio                  ; Comenzamos en la rutina principal.
+inicio  MOV.I 0, paso       ; Copiamos la instrucción completa a 2667 celdas.
+END inicio                  ; Fin del programa.
+` },
+  forLoopDemo: { label: "FOR/ROF demo", a: `;redcode-94
+;name Demo FOR ROF
+;author Entrenamiento Web
+;strategy Ejemplo sencillo que además prueba el preprocesador.
+paso    EQU 10              ; Distancia entre impactos.
+ORG inicio                  ; Punto de entrada.
+inicio  MOV.I bomba, @puntero ; Deja una bomba en la dirección apuntada.
+        ADD.AB #paso, puntero ; Avanza el puntero del bombardeo.
+        JMP inicio          ; Repite el bucle principal.
+bomba   DAT.F #0, #0        ; Bomba base.
+FOR 3                       ; Inserta tres celdas de relleno.
+        DAT.F #0, #0        ; Relleno generado por el FOR.
+ROF                         ; Fin del bloque repetido.
+puntero DAT.F #0, #50       ; Puntero usado por el MOV indirecto.
+END inicio                  ; Fin del programa.
+`, b: `;redcode-94
+;name EQU y etiquetas
+;author Entrenamiento Web
+;strategy Pequeño guerrero didáctico con constantes y etiquetas.
+paso    EQU 17              ; Constante reutilizable del programa.
+arranque EQU inicio         ; Alias simbólico de la etiqueta principal.
+ORG arranque                ; Se puede arrancar usando la constante.
+puntero DAT.F #0, #45       ; Base del bombardeo.
+inicio  MOV.I bomba, @puntero ; Escribe la bomba en el objetivo indirecto.
+        ADD.AB #paso, puntero ; Cambia la zona atacada.
+        JMP inicio          ; Sigue en bucle.
+bomba   DAT.F #0, #0        ; Bomba mortal.
+END arranque                ; Cierre usando el alias.
+` },
+  daredevilVsMotherland: { label: "DAREDEVIL vs MOTHERLAND", a: `;redcode-94b
+;assert 1
 ;name DAREDEVIL
-org main
-
-dare:    dat #0, #5
-cero:    dat #0, #0
-counter: dat #0, #500
-
-imp:     mov 0, 1
-
-main:    mov imp, @counter
-         spl @counter-1
-         add #800, counter
-         add #1, cero
-         seq @dare, @cero
-         jmp main`
-  },
-  motherland: {
-    label: 'MOTHERLAND',
-    code: `;redcode-94b
+;strategy Intenta poblar el núcleo con imps y jugar a tablas o desgaste.
+ORG main                    ; El programa arranca en la etiqueta main.
+dare    DAT #0, #5          ; Referencia usada por el SEQ para comparar patrones.
+cero    DAT #0, #0          ; Celda auxiliar que va cambiando con el tiempo.
+counter DAT #0, #500        ; Puntero indirecto desde el que se van lanzando copias.
+imp     MOV 0, 1            ; Imp mínimo que se copia una celda hacia delante.
+main    MOV imp, @counter   ; Escribe un imp en la posición apuntada por counter.
+        SPL @counter-1      ; Lanza un nuevo proceso cerca de la copia recién hecha.
+        ADD #800, counter   ; Desplaza el puntero para repartir las copias.
+        ADD #1, cero        ; Modifica la celda auxiliar para la comparación.
+        SEQ @dare, @cero    ; Compara dos referencias indirectas para decidir el flujo.
+        JMP main            ; Vuelve al inicio del ciclo principal.
+END main                    ; Entrada declarada del guerrero.
+`, b: `;redcode-94b
+;assert 1
 ;name MOTHERLAND
-org loop
-
-bomb:   dat #0, #12
-
-loop:   add #121, bomb
-        mov bomb, @bomb
-        jmp loop`
-  },
-  mago_del_tiempo: {
-    label: 'MAGO DEL TIEMPO R',
-    code: `;redcode
+;strategy Bombardero compacto que recorre el núcleo con un paso fijo.
+ORG loop                    ; El programa empieza en loop.
+bomb    DAT #0, #12         ; La bomba también guarda el paso inicial del puntero.
+loop    ADD #121, bomb      ; Incrementa el campo que actúa como puntero de ataque.
+        MOV bomb, @bomb     ; Copia la bomba en la dirección apuntada por ella misma.
+        JMP loop            ; Repite el bombardeo continuamente.
+END loop                    ; Punto de entrada.
+` },
+  magoVsSabio: { label: "MAGO DEL TIEMPO R vs EL SABIO OSCURO", a: `;redcode
 ;name MAGO DEL TIEMPO R
-gate equ -10
-step equ 1252
-time equ 1930
-
-coso:    spl 0, <gate+1
-         mov coso, @2
-         add #step, 1
-         mov patapum, <1 - (step*time)
-         jmp -3, 0
-         mov 1, <coso-16
-
-patapum: dat <gate-2, <gate-3`
-  },
-  sabio_oscuro: {
-    label: 'EL SABIO OSCURO',
-    code: `;redcode-94b
+;strategy Stone extraño con auto-modificación y bomba desplazada.
+gate    EQU -10             ; Desplazamiento base usado como referencia de puerta.
+step    EQU 1252            ; Paso de avance del patrón ofensivo.
+time    EQU 1930            ; Factor usado para calcular un gran desplazamiento.
+ORG coso                    ; La ejecución arranca en coso.
+coso    SPL 0, <gate+1      ; Duplica el proceso y toca la referencia cercana a gate.
+        MOV coso, @2        ; Copia la instrucción coso a una referencia indirecta cercana.
+        ADD #step, 1        ; Auto-modifica la instrucción siguiente para mover el patrón.
+        MOV patapum, <1-(step*time) ; Lanza la bomba muy lejos usando la expresión calculada.
+        JMP -3, 0           ; Vuelve al tramo central del bucle ofensivo.
+        MOV 1, <coso-16     ; Deja una copia adicional algo más atrás.
+patapum DAT <gate-2, <gate-3 ; Bomba con predecremento en ambos operandos.
+END coso                    ; Punto de entrada.
+`, b: `;redcode-94b
+;assert 1
 ;name EL SABIO OSCURO
-SRC: mov FIX, -1
-CPY: mov @SRC-1, <DST
-     mov <SRC-1, <DST
-     mov <SRC-1, <DST
-     mov <SRC-1, <DST
-     djn CPY, SRC-1
-DST: spl @DST, 5000
-HNT: jmz HNT, <DST
-     jmp SRC
-FIX: dat #0, #12
-     dat #0, #0
-     dat #0, #1`
-  },
-  imp: {
-    label: 'Imp',
-    code: `;redcode-94
-;name Imp
-MOV 0, 1`
-  },
-  dwarf: {
-    label: 'Dwarf',
-    code: `;redcode-94
-;name Dwarf
-ADD #4, 3
-MOV 2, @2
-JMP -2
-DAT 0, 0`
-  },
-  gemini: {
-    label: 'Gemini',
-    code: `;redcode-94
-;name Gemini
-start MOV @1, <4
-      DJN start, 1
-      SPL @2
-      JMP 2
-      DAT 0, 0
-      DAT 0, 100`
-  },
-  juggernaut: {
-    label: 'Juggernaut',
-    code: `;redcode-94
-;name Juggernaut
-loop MOV bomb, @ptr
-     ADD #10, ptr
-     JMP loop
-ptr  DAT 0, 100
-bomb DAT 0, 0`
-  },
-  mice: {
-    label: 'Mice',
-    code: `;redcode-94
-;name Mice
-ptr   DAT #0, #0
-start MOV #12, ptr
-loop  MOV @ptr, <dest
-      DJN loop, ptr
-      SPL @dest, 0
-      ADD #653, dest
-      JMZ start, start
-dest  DAT #0, #833`
-  },
-  scanner_basic: {
-    label: 'Tiny Scanner',
-    code: `;redcode-94
-;name Tiny Scanner
-step   EQU 12
-scan   SEQ.I step, step+4
-       JMP hit
-       ADD #step, scan
-       JMP scan
-hit    MOV bomb, @scan
-       JMP scan
-bomb   DAT 0, 0`
-  },
-  stone_mini: {
-    label: 'Stone Mini',
-    code: `;redcode-94
-;name Stone Mini
-STEP EQU 5
-loop  MOV bomb, @ptr
-      ADD #STEP, ptr
-      JMP loop
-ptr   DAT 0, 20
-bomb  DAT 0, 0`
-  },
-  silk_mini: {
-    label: 'Silk Mini',
-    code: `;redcode-94
-;name Silk Mini
-SPL 1
-MOV }-1, >-1
-JMP -2`
-  },
-  vampire: {
-    label: 'Vampire',
-    code: `;redcode-94
-;name Vampire
-fang  JMP pit
-loop  ADD #14, fang
-      MOV fang, @fang
-      JMP loop
-pit   SPL 0
-      JMP -1`
-  },
-  chang1: {
-    label: 'Chang1',
-    code: `;redcode-94
-;name Chang1
-loop  MOV bomb, @ptr
-      ADD #2365, ptr
-      DJN loop, count
-      JMP loop
-ptr   DAT 0, 100
-count DAT 0, 50
-bomb  DAT 0, 0`
-  },
-  heisenbug: {
-    label: 'Heisenbug',
-    code: `;redcode-94
-;name Heisenbug
-start ADD #30, scan
-scan  SNE 0, 5
-      JMP start
-      MOV bomb, @scan
-      MOV bomb, <scan
-      JMP start
-bomb  DAT 0, 0`
-  },
-  imp_ring: {
-    label: 'Imp Ring',
-    code: `;redcode-94
-;name Imp Ring
-MOV.I 0, 1`
-  },
-  for_loop: {
-    label: 'Macro FOR/ROF Demo',
-    code: `;redcode-94
-;name FOR Demo
-STEP EQU 4
-i FOR 4
-  DAT #i, #STEP*i
-ROF
-MOV 0, 1`
-  },
-  coreclear: {
-    label: 'Core Clear',
-    code: `;redcode-94
-;name Core Clear
-ptr  DAT 0, 40
-wipe MOV bomb, @ptr
-     DJN wipe, ptr
-     JMP wipe
-bomb DAT <2667, <5334`
-  },
-  agony: {
-    label: 'Agony',
-    code: `;redcode-94
-;name Agony
-     SPL 1
-     SPL 1
-     MOV -1, 0
-     SPL 1
-pap1 SPL @0, 800
-     MOV }-1, >-1
-     SPL @0, 1200
-     MOV }-1, >-1
-     JMP -1`
-  },
-  blur: {
-    label: 'Blur',
-    code: `;redcode-94
-;name Blur
-start SNE *ptr, @ptr
-      JMP loop
-      ADD #12, ptr
-      JMP start
-loop  MOV bomb, @ptr
-      JMP start
-ptr   DAT 0, 10
-bomb  JMP -1`
-  }
+;strategy Replicador agresivo que copia su cuerpo y activa la nueva copia.
+ORG SRC                     ; El programa arranca en SRC.
+SRC     MOV FIX, -1         ; Prepara el contador fuente y de paso deja un ataque extra.
+CPY     MOV @SRC-1, <DST    ; Primera copia del bloque desde la fuente hacia el destino.
+        MOV <SRC-1, <DST    ; Copia otra celda decreciendo ambos punteros.
+        MOV <SRC-1, <DST    ; Sigue copiando el bloque principal.
+        MOV <SRC-1, <DST    ; Última copia del tramo desenrollado.
+        DJN CPY, SRC-1      ; Repite la copia hasta que el contador se agote.
+DST     SPL @DST, 5000      ; Activa la nueva copia lanzando un proceso hacia ella.
+HNT     JMZ HNT, <DST       ; Espera o busca una nueva zona libre para replicarse.
+        JMP SRC             ; Reinicia el proceso de copia desde el origen.
+FIX     DAT #0, #12         ; Valor inicial usado para SRC-1.
+        DAT #0, #0          ; Celda mortal de apoyo.
+        DAT #0, #1          ; Otra celda de relleno útil para el cuerpo copiado.
+END SRC                     ; Punto de entrada.
+` },
 };
 
-const BATTLE_PRESETS = {
-  impVsDwarf: { label: 'Imp vs Dwarf', a: 'imp', b: 'dwarf' },
-  silkVsStone: { label: 'Silk Mini vs Stone Mini', a: 'silkMini', b: 'stoneMini' },
-  scannerVsImp: { label: 'Tiny Scanner vs Imp Ring', a: 'scanner', b: 'impRing' },
-  dareVsMother: { label: 'DAREDEVIL vs MOTHERLAND', a: 'daredevil', b: 'motherland' },
-  magoVsSabio: { label: 'MAGO DEL TIEMPO R vs EL SABIO OSCURO', a: 'magoReal', b: 'sabioOscuro' },
+const WARRIOR_LIBRARY = {
+  "01_imp_basico": { label: "01 · Imp básico comentado", code: `;redcode-94
+;name Imp básico comentado
+;author Entrenamiento Web
+;strategy Recorre el núcleo copiándose una celda adelante.
+ORG inicio                  ; El punto de entrada será la etiqueta inicio.
+inicio  MOV.I 0, 1          ; Copia esta misma instrucción una celda hacia delante.
+END inicio                  ; Indica al ensamblador dónde empieza la ejecución.
+` },
+  "02_imp_paso_dos": { label: "02 · Imp paso dos", code: `;redcode-94
+;name Imp paso dos
+;author Entrenamiento Web
+;strategy Variante del imp que avanza de dos en dos.
+paso    EQU 2               ; Definimos el salto del imp.
+ORG inicio                  ; La ejecución arranca en inicio.
+inicio  MOV.I 0, paso       ; Copia la instrucción actual dos celdas más allá.
+END inicio                  ; Cierra el programa y fija la entrada.
+` },
+  "03_imp_ring_2667": { label: "03 · Imp ring 2667", code: `;redcode-94
+;name Imp ring 2667
+;author Entrenamiento Web
+;strategy Imp clásico con salto de anillo para repartir copias.
+paso    EQU 2667            ; Salto clásico que reparte bien el anillo de 8000 celdas.
+ORG inicio                  ; Comenzamos en la rutina principal.
+inicio  MOV.I 0, paso       ; Copiamos la instrucción completa a 2667 celdas.
+END inicio                  ; Fin del programa.
+` },
+  "04_dwarf_basico": { label: "04 · Dwarf básico comentado", code: `;redcode-94
+;name Dwarf básico comentado
+;author Entrenamiento Web
+;strategy Bombardero pequeño que va dejando DAT por el núcleo.
+ORG loop                    ; Empezamos en el bucle del bombardero.
+loop    ADD.AB #4, puntero  ; Avanza el puntero de bombardeo de cuatro en cuatro.
+        MOV.I bomba, @puntero ; Copia la bomba en la dirección apuntada por puntero.
+        JMP loop            ; Repite el ataque una y otra vez.
+puntero DAT.F #0, #20       ; Guarda el desplazamiento actual usado por el bombardeo.
+bomba   DAT.F #0, #0        ; La bomba mortal: si un proceso la ejecuta, muere.
+END loop                    ; Fija el punto de entrada en loop.
+` },
+  "05_dwarf_paso_ocho": { label: "05 · Dwarf paso ocho", code: `;redcode-94
+;name Dwarf paso ocho
+;author Entrenamiento Web
+;strategy Igual que un dwarf, pero con una cadencia distinta de ataque.
+paso    EQU 8               ; Tamaño del salto del patrón de bombardeo.
+ORG loop                    ; Entramos en loop.
+loop    ADD.AB #paso, puntero ; Mueve el objetivo del siguiente disparo.
+        MOV.I bomba, @puntero ; Escribe una bomba DAT en la posición apuntada.
+        JMP loop            ; Sigue sembrando bombas.
+puntero DAT.F #0, #40       ; Puntero indirecto usado por el MOV.
+bomba   DAT.F #0, #0        ; Bomba básica de destrucción.
+END loop                    ; Fin del guerrero.
+` },
+  "06_bomber_lineal": { label: "06 · Bombero lineal", code: `;redcode-94
+;name Bombero lineal
+;author Entrenamiento Web
+;strategy Bombardeo simple con un puntero explícito.
+ORG ataque                  ; La rutina principal empieza en ataque.
+puntero DAT.F #0, #60       ; Aquí se guarda el desplazamiento del próximo objetivo.
+ataque  MOV.I bomba, @puntero ; Lanza una bomba hacia la dirección indicada.
+        ADD.AB #23, puntero ; Cambia el objetivo para no golpear siempre el mismo sitio.
+        JMP ataque          ; Continúa el bombardeo.
+bomba   DAT.F #0, #0        ; Carga mortal que mata al enemigo al ejecutarla.
+END ataque                  ; Entrada del programa.
+` },
+  "07_stone_mini": { label: "07 · Stone mini", code: `;redcode-94
+;name Stone mini
+;author Entrenamiento Web
+;strategy Stone compacto que bombardea con un paso fijo.
+paso    EQU 97              ; Distancia entre impactos consecutivos.
+ORG ciclo                   ; La ejecución comienza en ciclo.
+puntero DAT.F #0, #100      ; Acumula el desplazamiento del siguiente disparo.
+ciclo   MOV.I bomba, @puntero ; Deposita la bomba en el objetivo indirecto.
+        ADD.AB #paso, puntero ; Mueve el puntero para el próximo disparo.
+        JMP ciclo           ; Repite sin parar.
+bomba   DAT.F #0, #0        ; Bomba letal estándar.
+END ciclo                   ; Punto de entrada.
+` },
+  "08_stone_con_clear": { label: "08 · Stone con clear", code: `;redcode-94
+;name Stone con clear
+;author Entrenamiento Web
+;strategy Primero bombardea y luego barre una zona del núcleo.
+paso    EQU 111             ; Salto de bombardeo.
+vueltas EQU 18              ; Número de iteraciones antes de pasar al clear.
+ORG inicio                  ; Arranque del guerrero.
+puntero DAT.F #0, #150      ; Puntero de ataque del stone.
+contador DAT.F #0, #vueltas ; Lleva la cuenta de los bombardeos iniciales.
+inicio  MOV.I bomba, @puntero ; Lanza una bomba al objetivo actual.
+        ADD.AB #paso, puntero ; Cambia el objetivo del siguiente ataque.
+        DJN.B inicio, contador ; Repite mientras queden vueltas de apertura.
+clear   MOV.I bomba, >limpia ; Empieza a limpiar secuencialmente una zona.
+        DJN.F clear, >limpia ; Sigue limpiando mientras avanza el puntero.
+limpia  DAT.F #0, #40       ; Base usada por el clear secuencial.
+bomba   DAT.F #0, #0        ; Bomba reutilizada por ambas fases.
+END inicio                  ; Entrada del programa.
+` },
+  "09_scanner_mini": { label: "09 · Scanner mini", code: `;redcode-94
+;name Scanner mini
+;author Entrenamiento Web
+;strategy Busca actividad y, si la detecta, deja una bomba.
+paso    EQU 24              ; Distancia entre sondeos.
+ORG scan                    ; Arrancamos en la rutina de escaneo.
+scan    SEQ.I paso, paso+6  ; Compara dos celdas separadas para detectar cambios.
+        JMP golpe           ; Si parecen iguales, salta a la rutina de golpeo.
+        ADD.AB #paso, scan  ; Desplaza la ventana de escaneo.
+        JMP scan            ; Vuelve a comprobar.
+golpe   MOV.I bomba, @scan  ; Escribe una bomba donde cree haber encontrado al rival.
+        JMP scan            ; Retoma la búsqueda.
+bomba   DAT.F #0, #0        ; Bomba usada por el scanner.
+END scan                    ; Fin del guerrero.
+` },
+  "10_scanner_con_bomba": { label: "10 · Scanner con bomba", code: `;redcode-94
+;name Scanner con bomba
+;author Entrenamiento Web
+;strategy Scanner que alterna sondeo y bombardeo sobre un puntero.
+paso    EQU 31              ; Paso del escaneo.
+ORG scan                    ; Entrada del programa.
+puntero DAT.F #0, #80       ; Puntero base del área que se va revisando.
+scan    SNE.I @puntero, *puntero ; Comprueba si dos referencias indirectas difieren.
+        JMP siguiente       ; Si no detecta nada claro, continúa escaneando.
+        MOV.I bomba, @puntero ; Si hay diferencia, deja una bomba en el objetivo.
+siguiente ADD.AB #paso, puntero ; Desplaza el puntero del escáner.
+        JMP scan            ; Sigue buscando.
+bomba   DAT.F #0, #0        ; Bomba letal.
+END scan                    ; Punto de entrada.
+` },
+  "11_silk_mini": { label: "11 · Silk mini", code: `;redcode-94
+;name Silk mini
+;author Entrenamiento Web
+;strategy Pequeño replicador que se extiende usando SPL y MOV.
+ORG inicio                  ; Empezamos en la primera copia.
+inicio  SPL 1, <200         ; Crea un proceso extra para acelerar la expansión.
+        MOV.I }-1, >-1      ; Copia instrucciones desde detrás hacia delante.
+        JMP inicio          ; Repite para seguir replicándose.
+END inicio                  ; Entrada del guerrero.
+` },
+  "12_paper_simple": { label: "12 · Paper simple", code: `;redcode-94
+;name Paper simple
+;author Entrenamiento Web
+;strategy Replica el cuerpo y deja una pequeña defensa durante la copia.
+ORG inicio                  ; Punto de entrada.
+inicio  SPL 1, <300         ; Lanza otro proceso que ayudará a copiar.
+        MOV.I }-1, >-1      ; Copia el bloque del programa a otra zona del núcleo.
+        MOV.I bomba, >200   ; Deja una bomba algo más lejos para molestar al rival.
+        JMP -2              ; Sigue copiando y bombardeando.
+bomba   DAT.F #0, #0        ; Bomba defensiva de apoyo.
+END inicio                  ; Fin del programa.
+` },
+  "13_spl_carpet": { label: "13 · SPL carpet", code: `;redcode-94
+;name SPL carpet
+;author Entrenamiento Web
+;strategy Satura el planificador creando muchos procesos.
+ORG inicio                  ; La ejecución comienza aquí.
+inicio  SPL 1, 0            ; Duplica el proceso una vez.
+        SPL 1, 0            ; Duplica otra vez para ganar presencia.
+        SPL 1, 0            ; Tercera división del flujo.
+        MOV.I bomba, >100   ; Mientras tanto deja una bomba por delante.
+        JMP -1              ; Se mantiene insistiendo en la misma rutina.
+bomba   DAT.F #0, #0        ; Bomba usada por el tapiz de procesos.
+END inicio                  ; Entrada del guerrero.
+` },
+  "14_gate_keeper": { label: "14 · Gate keeper", code: `;redcode-94
+;name Gate keeper
+;author Entrenamiento Web
+;strategy Intenta cerrar una zona y limpiarla de forma controlada.
+ORG inicio                  ; Empezamos en la rutina principal.
+puerta  DAT.F #0, #20       ; Esta celda sirve de base para el gate.
+inicio  MOV.I bomba, >puerta ; Va dejando bombas tras la puerta.
+        DJN.F inicio, >puerta ; Avanza y repite mientras decrementa el contador.
+bomba   DAT.F >5, >7        ; Bomba con campos no triviales para desordenar al rival.
+END inicio                  ; Entrada del guerrero.
+` },
+  "15_core_clear_basico": { label: "15 · Core clear básico", code: `;redcode-94
+;name Core clear básico
+;author Entrenamiento Web
+;strategy Barre una franja del núcleo con DAT.
+ORG clear                   ; El programa arranca en clear.
+bomba   DAT.F #0, #0        ; Patrón mortal que se copiará muchas veces.
+clear   MOV.I bomba, >ptr   ; Copia la bomba en la siguiente posición a limpiar.
+        DJN.F clear, >ptr   ; Sigue avanzando y limpiando en cadena.
+ptr     DAT.F #0, #30       ; Referencia del clear secuencial.
+END clear                   ; Punto de entrada.
+` },
+  "16_djn_clear": { label: "16 · DJN clear", code: `;redcode-94
+;name DJN clear
+;author Entrenamiento Web
+;strategy Usa un contador decreciente para limpiar por tandas.
+vueltas EQU 25              ; Número de escrituras del clear.
+ORG inicio                  ; Entrada del programa.
+cont    DAT.F #0, #vueltas  ; Contador del bucle de limpieza.
+puntero DAT.F #0, #90       ; Base usada para la escritura secuencial.
+inicio  MOV.I bomba, >puntero ; Escribe una bomba en la siguiente celda.
+        DJN.B inicio, cont  ; Repite mientras el contador no llegue a cero.
+        JMP inicio          ; Cuando acaba, reinicia la secuencia desde el principio.
+bomba   DAT.F #0, #0        ; Bomba copiada por el clear.
+END inicio                  ; Fin del programa.
+` },
+  "17_vampiro_mini": { label: "17 · Vampiro mini", code: `;redcode-94
+;name Vampiro mini
+;author Entrenamiento Web
+;strategy Intenta convertir al enemigo en un salto a un pozo.
+paso    EQU 29              ; Distancia entre ataques del vampiro.
+ORG inicio                  ; Entrada del programa.
+pozo    JMP pozo, 0         ; Si el enemigo cae aquí, queda atrapado girando.
+puntero DAT.F #0, #70       ; Puntero de búsqueda del objetivo.
+inicio  MOV.I pozo, @puntero ; Escribe el salto al pozo sobre el rival.
+        ADD.AB #paso, puntero ; Cambia el objetivo del siguiente ataque.
+        JMP inicio          ; Sigue cazando víctimas.
+END inicio                  ; Fin del guerrero.
+` },
+  "18_paper_imp_mini": { label: "18 · Paper imp mini", code: `;redcode-94
+;name Paper imp mini
+;author Entrenamiento Web
+;strategy Mezcla una copia simple con un pequeño imp auxiliar.
+paso    EQU 2667            ; Salto del imp auxiliar.
+ORG arranque                ; Arranque principal.
+imp     MOV.I 0, paso       ; Núcleo del imp que recorre el anillo.
+arranque SPL copia          ; Crea un proceso para iniciar la copia.
+         JMP imp            ; Lanza otro proceso hacia el imp.
+copia   MOV.I }-1, >-1      ; Copia el programa a una nueva zona.
+         SPL imp            ; Añade más presión lanzando otro proceso al imp.
+         JMP copia          ; Mantiene viva la replicación.
+END arranque                ; Entrada del programa.
+` },
+  "19_oneshot_mini": { label: "19 · One-shot mini", code: `;redcode-94
+;name One-shot mini
+;author Entrenamiento Web
+;strategy Escanea y dispara una sola rutina de castigo cuando detecta algo.
+ORG scan                    ; Entrada del programa.
+puntero DAT.F #0, #120      ; Posición base del escaneo.
+scan    SNE.I *puntero, @puntero ; Busca diferencias entre dos referencias indirectas.
+        JMP sigue           ; Si no hay señal clara, continúa.
+        MOV.I bomba, @puntero ; Si detecta actividad, planta una bomba.
+sigue   ADD.AB #41, puntero ; Mueve la zona de sondeo.
+        JMP scan            ; Vuelve a empezar.
+bomba   DAT.F #0, #0        ; Bomba empleada por el one-shot.
+END scan                    ; Fin del guerrero.
+` },
+  "20_forrof_demo": { label: "20 · Demo FOR ROF", code: `;redcode-94
+;name Demo FOR ROF
+;author Entrenamiento Web
+;strategy Ejemplo sencillo que además prueba el preprocesador.
+paso    EQU 10              ; Distancia entre impactos.
+ORG inicio                  ; Punto de entrada.
+inicio  MOV.I bomba, @puntero ; Deja una bomba en la dirección apuntada.
+        ADD.AB #paso, puntero ; Avanza el puntero del bombardeo.
+        JMP inicio          ; Repite el bucle principal.
+bomba   DAT.F #0, #0        ; Bomba base.
+FOR 3                       ; Inserta tres celdas de relleno.
+        DAT.F #0, #0        ; Relleno generado por el FOR.
+ROF                         ; Fin del bloque repetido.
+puntero DAT.F #0, #50       ; Puntero usado por el MOV indirecto.
+END inicio                  ; Fin del programa.
+` },
+  "21_equ_y_etiquetas": { label: "21 · EQU y etiquetas", code: `;redcode-94
+;name EQU y etiquetas
+;author Entrenamiento Web
+;strategy Pequeño guerrero didáctico con constantes y etiquetas.
+paso    EQU 17              ; Constante reutilizable del programa.
+arranque EQU inicio         ; Alias simbólico de la etiqueta principal.
+ORG arranque                ; Se puede arrancar usando la constante.
+puntero DAT.F #0, #45       ; Base del bombardeo.
+inicio  MOV.I bomba, @puntero ; Escribe la bomba en el objetivo indirecto.
+        ADD.AB #paso, puntero ; Cambia la zona atacada.
+        JMP inicio          ; Sigue en bucle.
+bomba   DAT.F #0, #0        ; Bomba mortal.
+END arranque                ; Cierre usando el alias.
+` },
+  "22_daredevil_comentado": { label: "22 · DAREDEVIL", code: `;redcode-94b
+;assert 1
+;name DAREDEVIL
+;strategy Intenta poblar el núcleo con imps y jugar a tablas o desgaste.
+ORG main                    ; El programa arranca en la etiqueta main.
+dare    DAT #0, #5          ; Referencia usada por el SEQ para comparar patrones.
+cero    DAT #0, #0          ; Celda auxiliar que va cambiando con el tiempo.
+counter DAT #0, #500        ; Puntero indirecto desde el que se van lanzando copias.
+imp     MOV 0, 1            ; Imp mínimo que se copia una celda hacia delante.
+main    MOV imp, @counter   ; Escribe un imp en la posición apuntada por counter.
+        SPL @counter-1      ; Lanza un nuevo proceso cerca de la copia recién hecha.
+        ADD #800, counter   ; Desplaza el puntero para repartir las copias.
+        ADD #1, cero        ; Modifica la celda auxiliar para la comparación.
+        SEQ @dare, @cero    ; Compara dos referencias indirectas para decidir el flujo.
+        JMP main            ; Vuelve al inicio del ciclo principal.
+END main                    ; Entrada declarada del guerrero.
+` },
+  "23_motherland_comentado": { label: "23 · MOTHERLAND", code: `;redcode-94b
+;assert 1
+;name MOTHERLAND
+;strategy Bombardero compacto que recorre el núcleo con un paso fijo.
+ORG loop                    ; El programa empieza en loop.
+bomb    DAT #0, #12         ; La bomba también guarda el paso inicial del puntero.
+loop    ADD #121, bomb      ; Incrementa el campo que actúa como puntero de ataque.
+        MOV bomb, @bomb     ; Copia la bomba en la dirección apuntada por ella misma.
+        JMP loop            ; Repite el bombardeo continuamente.
+END loop                    ; Punto de entrada.
+` },
+  "24_mago_del_tiempo_r_comentado": { label: "24 · MAGO DEL TIEMPO R", code: `;redcode
+;name MAGO DEL TIEMPO R
+;strategy Stone extraño con auto-modificación y bomba desplazada.
+gate    EQU -10             ; Desplazamiento base usado como referencia de puerta.
+step    EQU 1252            ; Paso de avance del patrón ofensivo.
+time    EQU 1930            ; Factor usado para calcular un gran desplazamiento.
+ORG coso                    ; La ejecución arranca en coso.
+coso    SPL 0, <gate+1      ; Duplica el proceso y toca la referencia cercana a gate.
+        MOV coso, @2        ; Copia la instrucción coso a una referencia indirecta cercana.
+        ADD #step, 1        ; Auto-modifica la instrucción siguiente para mover el patrón.
+        MOV patapum, <1-(step*time) ; Lanza la bomba muy lejos usando la expresión calculada.
+        JMP -3, 0           ; Vuelve al tramo central del bucle ofensivo.
+        MOV 1, <coso-16     ; Deja una copia adicional algo más atrás.
+patapum DAT <gate-2, <gate-3 ; Bomba con predecremento en ambos operandos.
+END coso                    ; Punto de entrada.
+` },
+  "25_el_sabio_oscuro_comentado": { label: "25 · EL SABIO OSCURO", code: `;redcode-94b
+;assert 1
+;name EL SABIO OSCURO
+;strategy Replicador agresivo que copia su cuerpo y activa la nueva copia.
+ORG SRC                     ; El programa arranca en SRC.
+SRC     MOV FIX, -1         ; Prepara el contador fuente y de paso deja un ataque extra.
+CPY     MOV @SRC-1, <DST    ; Primera copia del bloque desde la fuente hacia el destino.
+        MOV <SRC-1, <DST    ; Copia otra celda decreciendo ambos punteros.
+        MOV <SRC-1, <DST    ; Sigue copiando el bloque principal.
+        MOV <SRC-1, <DST    ; Última copia del tramo desenrollado.
+        DJN CPY, SRC-1      ; Repite la copia hasta que el contador se agote.
+DST     SPL @DST, 5000      ; Activa la nueva copia lanzando un proceso hacia ella.
+HNT     JMZ HNT, <DST       ; Espera o busca una nueva zona libre para replicarse.
+        JMP SRC             ; Reinicia el proceso de copia desde el origen.
+FIX     DAT #0, #12         ; Valor inicial usado para SRC-1.
+        DAT #0, #0          ; Celda mortal de apoyo.
+        DAT #0, #1          ; Otra celda de relleno útil para el cuerpo copiado.
+END SRC                     ; Punto de entrada.
+` },
 };
+
 
 const THEME_PRESETS = {
   nebula: {
