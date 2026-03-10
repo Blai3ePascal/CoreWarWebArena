@@ -2,124 +2,60 @@ const { useEffect, useMemo, useRef, useState } = React;
 const Engine = window.CoreWarEngine;
 
 const WARRIOR_LIBRARY = {
-  daredevil: {
-    label: 'DAREDEVIL',
-    code: `;redcode-94b
-;name DAREDEVIL
-org main
+  newWarrior: {
+    label: 'Nuevo guerrero',
+    source: `;redcode-94
+;name Nuevo Guerrero
+;author 
+;strategy 
+ORG start
 
-dare:    dat #0, #5
-cero:    dat #0, #0
-counter: dat #0, #500
-
-imp:     mov 0, 1
-
-main:    mov imp, @counter
-         spl @counter-1
-         add #800, counter
-         add #1, cero
-         seq @dare, @cero
-         jmp main`
-  },
-  motherland: {
-    label: 'MOTHERLAND',
-    code: `;redcode-94b
-;name MOTHERLAND
-org loop
-
-bomb:   dat #0, #12
-
-loop:   add #121, bomb
-        mov bomb, @bomb
-        jmp loop`
-  },
-  mago_del_tiempo: {
-    label: 'MAGO DEL TIEMPO R',
-    code: `;redcode
-;name MAGO DEL TIEMPO R
-gate equ -10
-step equ 1252
-time equ 1930
-
-coso:    spl 0, <gate+1
-         mov coso, @2
-         add #step, 1
-         mov patapum, <1 - (step*time)
-         jmp -3, 0
-         mov 1, <coso-16
-
-patapum: dat <gate-2, <gate-3`
-  },
-  sabio_oscuro: {
-    label: 'EL SABIO OSCURO',
-    code: `;redcode-94b
-;name EL SABIO OSCURO
-SRC: mov FIX, -1
-CPY: mov @SRC-1, <DST
-     mov <SRC-1, <DST
-     mov <SRC-1, <DST
-     mov <SRC-1, <DST
-     djn CPY, SRC-1
-DST: spl @DST, 5000
-HNT: jmz HNT, <DST
-     jmp SRC
-FIX: dat #0, #12
-     dat #0, #0
-     dat #0, #1`
+start   MOV 0, 1
+        END start`,
   },
   imp: {
     label: 'Imp',
-    code: `;redcode-94
+    source: `;redcode-94
 ;name Imp
-MOV 0, 1`
+;author A.K. Dewdney
+MOV 0, 1`,
   },
   dwarf: {
     label: 'Dwarf',
-    code: `;redcode-94
+    source: `;redcode-94
 ;name Dwarf
+;author Example
 ADD #4, 3
 MOV 2, @2
 JMP -2
-DAT 0, 0`
+DAT 0, 0`,
   },
-  gemini: {
-    label: 'Gemini',
-    code: `;redcode-94
-;name Gemini
-start MOV @1, <4
-      DJN start, 1
-      SPL @2
-      JMP 2
-      DAT 0, 0
-      DAT 0, 100`
+  silkMini: {
+    label: 'Silk Mini',
+    source: `;redcode-94
+;name Silk Mini
+;author Demo
+SPL 1
+MOV }-1, >-1
+JMP -2`,
   },
-  juggernaut: {
-    label: 'Juggernaut',
-    code: `;redcode-94
-;name Juggernaut
-loop MOV bomb, @ptr
-     ADD #10, ptr
-     JMP loop
-ptr  DAT 0, 100
-bomb DAT 0, 0`
+  stoneMini: {
+    label: 'Stone Mini',
+    source: `;redcode-94
+;name Stone Mini
+;author Demo
+STEP EQU 5
+loop  MOV bomb, @ptr
+      ADD #STEP, ptr
+      JMP loop
+ptr   DAT 0, 20
+bomb  DAT 0, 0`,
   },
-  mice: {
-    label: 'Mice',
-    code: `;redcode-94
-;name Mice
-ptr   DAT #0, #0
-start MOV #12, ptr
-loop  MOV @ptr, <dest
-      DJN loop, ptr
-      SPL @dest, 0
-      ADD #653, dest
-      JMZ start, start
-dest  DAT #0, #833`
-  },
-  scanner_basic: {
+  scanner: {
     label: 'Tiny Scanner',
-    code: `;redcode-94
+    source: `;redcode-94
 ;name Tiny Scanner
+;author Demo
 step   EQU 12
 scan   SEQ.I step, step+4
        JMP hit
@@ -127,115 +63,19 @@ scan   SEQ.I step, step+4
        JMP scan
 hit    MOV bomb, @scan
        JMP scan
-bomb   DAT 0, 0`
+bomb   DAT 0, 0`,
   },
-  stone_mini: {
-    label: 'Stone Mini',
-    code: `;redcode-94
-;name Stone Mini
-STEP EQU 5
-loop  MOV bomb, @ptr
-      ADD #STEP, ptr
-      JMP loop
-ptr   DAT 0, 20
-bomb  DAT 0, 0`
-  },
-  silk_mini: {
-    label: 'Silk Mini',
-    code: `;redcode-94
-;name Silk Mini
-SPL 1
-MOV }-1, >-1
-JMP -2`
-  },
-  vampire: {
-    label: 'Vampire',
-    code: `;redcode-94
-;name Vampire
-fang  JMP pit
-loop  ADD #14, fang
-      MOV fang, @fang
-      JMP loop
-pit   SPL 0
-      JMP -1`
-  },
-  chang1: {
-    label: 'Chang1',
-    code: `;redcode-94
-;name Chang1
-loop  MOV bomb, @ptr
-      ADD #2365, ptr
-      DJN loop, count
-      JMP loop
-ptr   DAT 0, 100
-count DAT 0, 50
-bomb  DAT 0, 0`
-  },
-  heisenbug: {
-    label: 'Heisenbug',
-    code: `;redcode-94
-;name Heisenbug
-start ADD #30, scan
-scan  SNE 0, 5
-      JMP start
-      MOV bomb, @scan
-      MOV bomb, <scan
-      JMP start
-bomb  DAT 0, 0`
-  },
-  imp_ring: {
+  impRing: {
     label: 'Imp Ring',
-    code: `;redcode-94
+    source: `;redcode-94
 ;name Imp Ring
-MOV.I 0, 1`
+;author Demo
+MOV.I 0, 1`,
   },
-  for_loop: {
-    label: 'Macro FOR/ROF Demo',
-    code: `;redcode-94
-;name FOR Demo
-STEP EQU 4
-i FOR 4
-  DAT #i, #STEP*i
-ROF
-MOV 0, 1`
-  },
-  coreclear: {
-    label: 'Core Clear',
-    code: `;redcode-94
-;name Core Clear
-ptr  DAT 0, 40
-wipe MOV bomb, @ptr
-     DJN wipe, ptr
-     JMP wipe
-bomb DAT <2667, <5334`
-  },
-  agony: {
-    label: 'Agony',
-    code: `;redcode-94
-;name Agony
-     SPL 1
-     SPL 1
-     MOV -1, 0
-     SPL 1
-pap1 SPL @0, 800
-     MOV }-1, >-1
-     SPL @0, 1200
-     MOV }-1, >-1
-     JMP -1`
-  },
-  blur: {
-    label: 'Blur',
-    code: `;redcode-94
-;name Blur
-start SNE *ptr, @ptr
-      JMP loop
-      ADD #12, ptr
-      JMP start
-loop  MOV bomb, @ptr
-      JMP start
-ptr   DAT 0, 10
-bomb  JMP -1`
-  }
+  daredevil: { label: 'DAREDEVIL', source: ";redcode-94b\n;assert 1\n;name DAREDEVIL\n;strategy EMPATAR\n;date 2022-Feb-25\n;version 1\n\t\torg main\n\ndare:\t\tdat #0, #5\ncero:\t\tdat #0, #0\ncounter: \tdat #0, #500\n\nimp:\t\tmov 0, 1\n\nmain:\t\tmov imp, @counter\n\t\tspl @counter-1\n\t\tadd #800, counter\n\t\tadd #1, cero\n\t\tseq @dare, @cero\n\t\tjmp main\n" },
+  motherland: { label: 'MOTHERLAND', source: ";redcode-94b\n;assert 1\n;name MOTHERLAND\n;strategy kill_the_opponent\n;date 2022-Feb-25\n;version 1\n\n\torg loop\n\nbomb: \tdat #0, #12\n\nloop:\tadd #121, bomb\n\tmov bomb, @bomb\n\tjmp loop\n" },
+  magoReal: { label: 'MAGO DEL TIEMPO R', source: ";redcode\n;name MAGO DEL TIEMPO R\n;version 2\n\ngate equ -10\nstep equ 1252\ntime equ 1930\n\ncoso   spl  0,     <gate+1\n       mov  coso, @2\n       add #step,   1\n       mov  patapum, <1 - (step*time)\n       jmp  -3,     0\n       mov  1,     <coso-16\n       \npatapum  dat <gate-2, <gate-3\nend coso\n" },
+  sabioOscuro: { label: 'EL SABIO OSCURO', source: ";redcode-94b\n;assert 1\n;name EL SABIO OSCURO\n;kill <NEW_WARRIOR>\n;strategy kill_the_opponent\n;date 2019-Feb-06\n;version 1\n\n\nSRC\tmov\t FIX,\t-1\t;set up the SouRCe counter (and do bonus attack)\nCPY\tmov\t@SRC-1,\t<DST\t;fat, unrolled loop to copy...\n\tmov\t<SRC-1,\t<DST\t;does it in 15 cycles\n\tmov\t<SRC-1,\t<DST\n\tmov\t<SRC-1,\t<DST\n\tdjn\t CPY,\t SRC-1\nDST\tspl\t @DST,\t 5000\t;activate new copy\nHNT\tjmz\t HNT,\t<DST\t;search for a new spot...\n\tjmp\t SRC\t\t;copy again\nFIX\tdat\t #0,\t #12\t;this is the starting value for SRC-1\n\tdat\t #0,\t #0\t;death-dealin' data\n\tdat\t #0,\t #1\n\tend\t SRC\n" },
 };
 
 const BATTLE_PRESETS = {
