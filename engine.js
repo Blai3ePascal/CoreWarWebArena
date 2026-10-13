@@ -97,21 +97,25 @@
   }
 
   function safeEvalExpression(expression, resolver) {
-    const tokens = expression.match(/[A-Za-z_][A-Za-z0-9_]*|\d+|[()+*/%\-]/g) || [];
+    const tokens = expression.match(/[A-Za-z_][A-Za-z0-9_]*|\d+|==|!=|<=|>=|&&|\|\||[!<>()+*/%\-]/g) || [];
     if (tokens.join('') !== expression.replace(/\s/g, '')) throw new Error(`Expresión inválida: ${expression}`);
     let i = 0;
     function atom() {
       const t = tokens[i++];
       if (t === '+') return atom();
       if (t === '-') return -atom();
-      if (t === '(') { const n = sum(); if (tokens[i++] !== ')') throw new Error('Falta cerrar paréntesis'); return n; }
+      if (t === '!') return atom() === 0 ? 1 : 0;
+      if (t === '(') { const n = logic(); if (tokens[i++] !== ')') throw new Error('Falta cerrar paréntesis'); return n; }
       if (/^\d+$/.test(t || '')) return Number(t);
       if (/^[A-Za-z_]/.test(t || '')) { const n = resolver(t); if (!Number.isFinite(n)) throw new Error(`Símbolo no resuelto: ${t}`); return n; }
       throw new Error('Expresión incompleta');
     }
     function product() { let n = atom(); while (['*','/','%'].includes(tokens[i])) { const op = tokens[i++], v = atom(); if ((op === '/' || op === '%') && v === 0) throw new Error('División por cero en expresión'); n = op === '*' ? n * v : op === '/' ? Math.trunc(n / v) : n % v; } return n; }
     function sum() { let n = product(); while (['+','-'].includes(tokens[i])) { const op = tokens[i++], v = product(); n = op === '+' ? n + v : n - v; } return n; }
-    const n = sum(); if (i !== tokens.length || !Number.isSafeInteger(n)) throw new Error('Expresión inválida o fuera de rango'); return n;
+    function comparison() { let n=sum(); while(['==','!=','<','>','<=','>='].includes(tokens[i])) { const op=tokens[i++],v=sum(); n=Number(op==='=='?n===v:op==='!='?n!==v:op==='<'?n<v:op==='>'?n>v:op==='<='?n<=v:n>=v); } return n; }
+    function and() { let n=comparison(); while(tokens[i]==='&&'){i++;const v=comparison();n=Number(!!n&&!!v);}return n; }
+    function logic() {let n=and();while(tokens[i]==='||'){i++;const v=and();n=Number(!!n||!!v);}return n;}
+    const n = logic(); if (i !== tokens.length || !Number.isSafeInteger(n)) throw new Error('Expresión inválida o fuera de rango'); return n;
   }
 
   function preprocessForLoops(rawLines, constantsResolver) {
@@ -162,6 +166,7 @@
       VERSION: 94,
     };
 
+    rawLines.forEach((line,index)=>{const m=line.trim().match(/^;assert\s+(.+)$/i);if(m){const n=safeEvalExpression(m[1].split(';')[0],name=>constants[name.toUpperCase()]);if(!n)throw new Error(`La condición ;assert no se cumple (línea ${index+1}).`);}});
     const preprocessed = preprocessForLoops(rawLines, (name) => {
       if (Object.prototype.hasOwnProperty.call(constants, name.toUpperCase())) return constants[name.toUpperCase()];
       return undefined;
@@ -360,6 +365,7 @@
     return () => { h += 0x6D2B79F5; let t = Math.imul(h ^ h >>> 15, 1 | h); t ^= t + Math.imul(t ^ t >>> 7, 61 | t); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
   }
   function validateSettings(settings) {
+    if(settings.drawPolicy!==undefined&&!['draw','territory','processes'].includes(settings.drawPolicy))throw new Error('Regla de empate inválida.');
     for (const [key, min, max] of [['coreSize',32,32768],['maxCycles',1,500000],['maxProcesses',1,8000],['maxLength',1,1000],['minDistance',0,32768],['pSpaceSize',1,4096]]) {
       if (!Number.isInteger(settings[key]) || settings[key] < min || settings[key] > max) throw new Error(`Valor inválido: ${key} (${min}–${max}).`);
     }
@@ -841,12 +847,23 @@
     state.cycle += 1;
     state.version += 1;
     finalizeBattleState(state);
+    if (state.halted) resolveDraw(state, state.settings.drawPolicy || 'draw');
 
     if (executed) {
       state.message = `[${executed.cycle}] ${executed.warrior} @${executed.ip}: ${executed.summary}`;
     }
 
     if (state.halted) state.warriors.forEach(w => { w.lastResult = state.queues[w.id].length ? (state.winner === 'Empate' ? 2 : 1) : 0; });
+    return state;
+  }
+
+  function resolveDraw(state, policy = 'draw') {
+    if (!['draw','territory','processes'].includes(policy)) throw new Error('Regla de empate inválida.');
+    if (!state.halted || state.winner !== 'Empate' || policy === 'draw') return state;
+    const a = policy === 'processes' ? state.queues.A.length : state.core.filter(c => c.owner === 'A').length;
+    const b = policy === 'processes' ? state.queues.B.length : state.core.filter(c => c.owner === 'B').length;
+    if (a !== b) {state.winner = a>b?'A':'B';state.winReason = `Desempate por ${policy === 'processes'?'procesos vivos':'celdas escritas'}: A ${a}, B ${b}.`;}
+    else state.winReason += ` Igualdad en ${policy === 'processes'?'procesos vivos':'celdas escritas'} (${a}–${b}).`;
     return state;
   }
 
@@ -861,6 +878,7 @@
   const api = {
     DEFAULT_SETTINGS,
     seededRandom,
+    resolveDraw,
     validateSettings,
     compileWarrior,
     createBattle,

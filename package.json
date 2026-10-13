@@ -1,8 +1,8 @@
 {
   "name": "ogun-corewar",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Operaciones de Guerreros en un Núcleo. Core War en castellano, creado por Sara y Pascal.",
-  "scripts": {"test": "node --test tests/*.test.cjs", "check": "node --check engine.js && node --check app.js && node --check challenges.js && node --check data.js && node --check worker.js"},
+  "scripts": {"test": "node --test tests/*.test.cjs", "check": "node --check engine.js && node --check app.js && node --check challenges.js && node --check data.js && node --check worker.js && node --check competition.js && node --check session.js"},
   "engines": {"node": ">=22"}
 }
