@@ -165,7 +165,7 @@ function startTournament(){
  for(let i=0;i<entries.length;i++)for(let j=i+1;j<entries.length;j++){const a=requested.find(w=>w.id===entries[i].id),b=requested.find(w=>w.id===entries[j].id);if(!T.compatible(a.report.length,b.report.length,settings))throw new Error(`No caben juntos ${a.name} y ${b.name}. Aumenta el núcleo o reduce la distancia mínima.`);}
  const seed=tournamentDraft.seed||String(crypto.getRandomValues(new Uint32Array(1))[0]),format=options.format,rounds=options.rounds,name=tournamentDraft.name.trim()||'Copa del núcleo';
  tournamentProgress={name,format,rounds,seed,entries:structuredClone(entries),settings:{...settings,drawPolicy:options.drawPolicy},options,rows:entries.map(w=>({id:w.id,name:w.name,points:0,wins:0,draws:0,losses:0,played:0,byes:0,buchholz:0,sonneborn:0,matchWins:0})),matches:[],stages:[],champion:null,leaders:[]};
- worker=new Worker('worker.js?v=1.1.0');tournamentRunning=true;saveUploads();
+ worker=new Worker('worker.js?v=1.1.1');tournamentRunning=true;saveUploads();
  worker.onmessage=({data:msg})=>{
  if(msg.type==='game'){if(data.prefs.tournamentFx==='games')showResult({winner:msg.result.winner,a:msg.a,b:msg.b,reason:msg.result.reason},'tournament');return;}
  if(msg.type==='error'){worker?.terminate();worker=null;tournamentRunning=false;tournamentProgress=null;notice('No se pudo completar el torneo: '+msg.message);if(route==='tournaments')render();return;}

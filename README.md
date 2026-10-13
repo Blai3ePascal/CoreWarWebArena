@@ -54,6 +54,10 @@ npm run check
 npm test
 ```
 
+La versión 1.1.1 corrige la exportación del motor: se expone en `globalThis`, disponible tanto en la página como en un Worker. La exportación anterior dependía de `window`, que no existe en Workers.
+
+La batería actual contiene 175 pruebas. Los torneos cargan `worker.js`, `engine.js` y `competition.js` desde cero en un contexto sin `window` ni `module`; ningún test les proporciona un motor precargado. Se incluyen 84 combinaciones de formatos, número de participantes y reglas de empate, y 17 arranques de hilos separados para comprobar aislamiento, concurrencia y cancelación. Los hilos Node ejecutan un adaptador de `importScripts`; no equivalen a una revisión de navegador. Una prueba negativa reproduce el fallo con la exportación anterior.
+
 Las pruebas cubren el motor, generación diaria, admisión de archivos, reglas, sistemas de emparejamiento, descansos, clasificación, cookies de sesión, anuncios, geometría cuadrada, ejecución del Worker y flujos de interacción con un arnés DOM. El arnés no comprueba disposición visual, lectores de pantalla ni compatibilidad real de todos los navegadores. No se realizó una revisión visual en navegador durante esta entrega.
 
 ## Publicación

@@ -889,6 +889,6 @@
     makeEmptyInstruction,
   };
 
-  if (typeof window !== "undefined") window.CoreWarEngine = api;
+  if (typeof globalThis !== "undefined") globalThis.CoreWarEngine = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })();
