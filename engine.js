@@ -97,82 +97,58 @@
   }
 
   function safeEvalExpression(expression, resolver) {
-    let expr = expression.trim();
-    if (!expr) return 0;
-
-    expr = expr.replace(/\b[A-Za-z_][A-Za-z0-9_]*\b/g, (name) => {
-      const value = resolver(name);
-      if (value === undefined || value === null || Number.isNaN(value)) {
-        throw new Error(`Símbolo no resuelto: ${name}`);
-      }
-      return String(value);
-    });
-
-    if (!/^[0-9+\-*/%()\s.]+$/.test(expr)) {
-      throw new Error(`Expresión inválida: ${expression}`);
+    const tokens = expression.match(/[A-Za-z_][A-Za-z0-9_]*|\d+|[()+*/%\-]/g) || [];
+    if (tokens.join('') !== expression.replace(/\s/g, '')) throw new Error(`Expresión inválida: ${expression}`);
+    let i = 0;
+    function atom() {
+      const t = tokens[i++];
+      if (t === '+') return atom();
+      if (t === '-') return -atom();
+      if (t === '(') { const n = sum(); if (tokens[i++] !== ')') throw new Error('Falta cerrar paréntesis'); return n; }
+      if (/^\d+$/.test(t || '')) return Number(t);
+      if (/^[A-Za-z_]/.test(t || '')) { const n = resolver(t); if (!Number.isFinite(n)) throw new Error(`Símbolo no resuelto: ${t}`); return n; }
+      throw new Error('Expresión incompleta');
     }
-
-    const value = Function(`"use strict"; return (${expr});`)();
-    if (!Number.isFinite(value)) {
-      throw new Error(`Expresión no finita: ${expression}`);
-    }
-    return Math.trunc(value);
+    function product() { let n = atom(); while (['*','/','%'].includes(tokens[i])) { const op = tokens[i++], v = atom(); if ((op === '/' || op === '%') && v === 0) throw new Error('División por cero en expresión'); n = op === '*' ? n * v : op === '/' ? Math.trunc(n / v) : n % v; } return n; }
+    function sum() { let n = product(); while (['+','-'].includes(tokens[i])) { const op = tokens[i++], v = product(); n = op === '+' ? n + v : n - v; } return n; }
+    const n = sum(); if (i !== tokens.length || !Number.isSafeInteger(n)) throw new Error('Expresión inválida o fuera de rango'); return n;
   }
 
   function preprocessForLoops(rawLines, constantsResolver) {
-    let index = 0;
-
-    function parseBlock(loopVar) {
-      const output = [];
-      while (index < rawLines.length) {
-        const original = rawLines[index++];
-        const uncommented = stripComment(original).trim();
-        if (!uncommented) {
-          output.push(original);
-          continue;
+    const equ = {};
+    rawLines.forEach(line => { const m = stripComment(line).trim().match(/^([a-z_]\w*)\s+EQU\s+(.+)$/i); if (m) equ[m[1].toUpperCase()] = m[2]; });
+    function expand(lines, env = {}, depth = 0) {
+      if (depth > 12) throw new Error('Demasiados bucles FOR anidados');
+      const out = [];
+      function resolve(name, level = 0) { const key = name.toUpperCase(); if (level > 20) throw new Error('EQU recursivo'); if (key in env) return env[key]; if (key in equ) return safeEvalExpression(equ[key], n => resolve(n, level + 1)); const value = constantsResolver(key); if (value === undefined) throw new Error(`Símbolo no resuelto: ${name}`); return value; }
+      for (let i = 0; i < lines.length; i++) {
+        const code = stripComment(lines[i]).trim();
+        const m = code.match(/^(?:([a-z_]\w*)\s+)?FOR\s+(.+)$/i);
+        if (/^ROF$/i.test(code)) throw new Error('ROF sin FOR');
+        if (!m) { out.push(lines[i]); continue; }
+        let end = i + 1, nesting = 1;
+        for (; end < lines.length; end++) { const c = stripComment(lines[end]).trim(); if (/^(?:[a-z_]\w*\s+)?FOR\s/i.test(c)) nesting++; if (/^ROF$/i.test(c) && --nesting === 0) break; }
+        if (nesting) throw new Error('FOR sin ROF');
+        const count = safeEvalExpression(m[2], n => n.toUpperCase() === 'CURLINE' ? out.filter(l => stripComment(l).trim()).length : resolve(n));
+        if (count < 0 || count > 10000) throw new Error('Repeticiones FOR fuera de rango');
+        for (let k = 1; k <= count; k++) {
+          const innerEnv = {...env}; if (m[1]) innerEnv[m[1].toUpperCase()] = k;
+          let inner = lines.slice(i + 1, end);
+          if (m[1]) { const re = new RegExp(`&?\\b${m[1]}\\b`, 'gi'); inner = inner.map(l => l.replace(re, String(k))); }
+          out.push(...expand(inner, innerEnv, depth + 1));
+          if (out.length > 12000) throw new Error('Programa expandido demasiado largo');
         }
-
-        const tokens = tokenizeWords(uncommented);
-        const first = tokens[0] ? normalizeLabelToken(tokens[0]).toUpperCase() : '';
-        const second = tokens[1] ? tokens[1].toUpperCase() : '';
-
-        if (first === 'ROF') {
-          return output;
-        }
-
-        const isFor = first === 'FOR' || second === 'FOR';
-        if (isFor) {
-          const localVar = first === 'FOR' ? null : normalizeLabelToken(tokens[0]);
-          const expr = first === 'FOR' ? tokens.slice(1).join(' ') : tokens.slice(2).join(' ');
-          const count = Math.max(0, safeEvalExpression(expr, constantsResolver));
-          const inner = parseBlock(localVar);
-          for (let i = 1; i <= count; i += 1) {
-            inner.forEach((line) => {
-              let expanded = line;
-              if (localVar) {
-                const re = new RegExp(`&${localVar}`, 'gi');
-                expanded = expanded.replace(re, String(i));
-              }
-              if (loopVar) {
-                const reParent = new RegExp(`&${loopVar}`, 'gi');
-                expanded = expanded.replace(reParent, String(i));
-              }
-              output.push(expanded);
-            });
-          }
-          continue;
-        }
-
-        output.push(original);
+        i = end;
       }
-      return output;
+      return out;
     }
-
-    return parseBlock(null);
+    return expand(rawLines);
   }
 
   function compileWarrior(source, userSettings = {}) {
     const settings = { ...DEFAULT_SETTINGS, ...userSettings };
+    validateSettings(settings);
+    if (typeof source !== 'string' || source.length > 100000) throw new Error('Código demasiado grande');
     const metadata = parseMetadata(source);
     const rawLines = source.replace(/\t/g, ' ').split(/\r?\n/);
     const constants = {
@@ -188,7 +164,7 @@
 
     const preprocessed = preprocessForLoops(rawLines, (name) => {
       if (Object.prototype.hasOwnProperty.call(constants, name.toUpperCase())) return constants[name.toUpperCase()];
-      return 0;
+      return undefined;
     });
 
     const equs = {};
@@ -206,7 +182,7 @@
       const secondUpper = tokens[1] ? tokens[1].toUpperCase() : '';
 
       if (secondUpper === 'EQU') {
-        equs[first] = tokens.slice(2).join(' ');
+        equs[first.toUpperCase()] = tokens.slice(2).join(' ');
         continue;
       }
       if (firstUpper === 'PIN') {
@@ -235,7 +211,7 @@
       const firstSplit = splitOpcodeModifier(firstUpper);
 
       if (!OPCODES.has(firstSplit.opcode) && !PSEUDO_OPS.has(firstUpper)) {
-        label = first;
+        label = first.toUpperCase();
         if (labels[label] !== undefined) throw new Error(`Etiqueta duplicada: ${label} (línea ${lineNumber})`);
         labels[label] = address;
         cursor = 1;
@@ -324,6 +300,7 @@
       if (!allowSingle && parts.length < 2) {
         throw new Error(`Falta operando B en línea ${line.lineNumber}`);
       }
+      if (parts.length > 2) throw new Error(`Demasiados operandos en línea ${line.lineNumber}`);
       const aDefaultMode = line.opcode === 'DAT' ? '#' : '$';
       const bDefaultMode = line.opcode === 'DAT' ? '#' : '$';
       let aText = parts[0] || '';
@@ -355,6 +332,7 @@
       };
     });
 
+    if (!program.length) throw new Error('El guerrero no contiene instrucciones.');
     let entryPoint = 0;
     if (entryExpr) {
       entryPoint = mod(safeEvalExpression(entryExpr, (name) => symbolResolver(name, 0)), program.length || 1);
@@ -377,21 +355,35 @@
     };
   }
 
-  function pickLoadPoints(settings, lenA, lenB) {
-    const max = settings.coreSize;
-    const minDist = settings.minDistance;
-    const startA = Math.floor(Math.random() * max);
-    let startB = mod(startA + Math.floor(max / 2), max);
-    if (Math.abs(startB - startA) < minDist) {
-      startB = mod(startA + minDist + lenA, max);
+  function seededRandom(seed) {
+    let h = 2166136261; for (const c of String(seed)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); }
+    return () => { h += 0x6D2B79F5; let t = Math.imul(h ^ h >>> 15, 1 | h); t ^= t + Math.imul(t ^ t >>> 7, 61 | t); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  }
+  function validateSettings(settings) {
+    for (const [key, min, max] of [['coreSize',32,32768],['maxCycles',1,500000],['maxProcesses',1,8000],['maxLength',1,1000],['minDistance',0,32768],['pSpaceSize',1,4096]]) {
+      if (!Number.isInteger(settings[key]) || settings[key] < min || settings[key] > max) throw new Error(`Valor inválido: ${key} (${min}–${max}).`);
     }
-    return [startA, startB];
+  }
+  function pickLoadPoints(settings, lenA, lenB, random) {
+    const n = settings.coreSize, distance = Math.max(settings.minDistance, lenA), upper = n - Math.max(settings.minDistance, lenB);
+    if (distance > upper) throw new Error('El núcleo no permite cargar ambos guerreros con esa distancia.');
+    if (settings.loadPoints) {
+      const [a,b] = settings.loadPoints, d = mod(b-a,n);
+      if (![a,b].every(x=>Number.isInteger(x) && x>=0 && x<n) || d<distance || d>upper) throw new Error('Posiciones de carga inválidas o solapadas.');
+      return [a,b];
+    }
+    const a = Math.floor(random()*n), offset = distance + Math.floor(random()*(upper-distance+1));
+    return [a,mod(a+offset,n)];
   }
 
   function createBattle(compiledA, compiledB, userSettings = {}) {
     const settings = { ...DEFAULT_SETTINGS, ...userSettings };
+    validateSettings(settings);
+    const seed = settings.seed === undefined || settings.seed === '' ? (globalThis.crypto?.getRandomValues ? String(globalThis.crypto.getRandomValues(new Uint32Array(1))[0]) : String(Math.random())) : String(settings.seed);
+    const random = seededRandom(seed);
+    settings.seed = seed;
     const core = Array.from({ length: settings.coreSize }, makeEmptyInstruction);
-    const [startA, startB] = pickLoadPoints(settings, compiledA.length, compiledB.length);
+    const [startA, startB] = pickLoadPoints(settings, compiledA.length, compiledB.length, random);
 
     const warriors = [compiledA, compiledB].map((compiled, index) => {
       const id = WARRIOR_IDS[index];
@@ -403,6 +395,7 @@
         strategy: compiled.metadata.strategy || [],
         pin: compiled.pin,
         pSpace: null,
+        lastResult: settings.coreSize - 1,
         start,
         entry: mod(start + compiled.entryPoint, settings.coreSize),
         program: compiled.program,
@@ -412,7 +405,7 @@
 
     const sharedSpaces = new Map();
     warriors.forEach((warrior) => {
-      const key = warrior.pin == null ? `${warrior.id}-${Math.random()}` : `pin-${warrior.pin}`;
+      const key = warrior.pin == null ? warrior.id : `pin-${warrior.pin}`;
       if (!sharedSpaces.has(key)) {
         const pSpace = Array.from({ length: settings.pSpaceSize }, (_, i) => (i === 0 ? settings.coreSize - 1 : 0));
         sharedSpaces.set(key, pSpace);
@@ -436,7 +429,7 @@
         B: [warriors[1].entry],
       },
       cycle: 0,
-      turn: 0,
+      turn: settings.firstWarrior === 'A' ? 0 : settings.firstWarrior === 'B' ? 1 : Math.floor(random()*2),
       halted: false,
       winner: null,
       winReason: '',
@@ -471,7 +464,7 @@
     const core = state.core;
 
     if (mode === '#') {
-      const register = side === 'A' ? cloneInstruction(ir) : cloneInstruction(core[ip]);
+      const register = cloneInstruction(core[ip]);
       recordTouch(state, ip, 'read', warriorId);
       return {
         addr: ip,
@@ -495,6 +488,7 @@
     }
 
     let finalAddr = pointerAddr;
+    let buffered = null;
     switch (mode) {
       case '$':
         finalAddr = pointerAddr;
@@ -515,10 +509,12 @@
         break;
       case '}':
         finalAddr = mod(pointerAddr + core[pointerAddr].aVal, state.settings.coreSize);
+        buffered = cloneInstruction(core[finalAddr]);
         applyPost('aVal');
         break;
       case '>':
         finalAddr = mod(pointerAddr + core[pointerAddr].bVal, state.settings.coreSize);
+        buffered = cloneInstruction(core[finalAddr]);
         applyPost('bVal');
         break;
       default:
@@ -530,7 +526,7 @@
 
     return {
       addr: finalAddr,
-      register: cloneInstruction(core[finalAddr]),
+      register: buffered || cloneInstruction(core[finalAddr]),
       immediate: false,
       pointerAddr,
     };
@@ -666,7 +662,7 @@
         writeDest((cell) => {
           fieldPairs(effectiveMod).forEach(([sf, df]) => {
             const s = src.register[sf];
-            const d = cell[df];
+            const d = dst.register[df];
             let value = d;
             if (ir.op === 'ADD') value = mod(d + s, state.settings.coreSize);
             if (ir.op === 'SUB') value = mod(d - s, state.settings.coreSize);
@@ -737,7 +733,7 @@
             cell[field] = mod(cell[field] - 1, state.settings.coreSize);
           });
         });
-        const cond = fields.some((field) => state.core[dst.addr][field] !== 0);
+        const cond = fields.some((field) => mod(dst.register[field] - 1, state.settings.coreSize) !== 0);
         queuePush(state, warriorId, cond ? src.addr : nextAddr);
         summary = cond ? `decrementa y salta a ${src.addr}` : 'decrementa y no salta';
         break;
@@ -781,7 +777,7 @@
         writeDest((cell) => {
           fieldPairs(effectiveMod).forEach(([sf, df]) => {
             const pIndex = mod(src.register[sf], state.settings.pSpaceSize);
-            cell[df] = mod(pSpace[pIndex], state.settings.coreSize);
+            cell[df] = mod(pIndex === 0 ? warrior.lastResult : pSpace[pIndex], state.settings.coreSize);
           });
         });
         queuePush(state, warriorId, nextAddr);
@@ -794,7 +790,8 @@
         const pSpace = warrior.pSpace;
         fieldPairs(effectiveMod).forEach(([sf, df]) => {
           const pIndex = mod(dst.register[df], state.settings.pSpaceSize);
-          if (pIndex !== 0) pSpace[pIndex] = mod(src.register[sf], state.settings.coreSize);
+          if (pIndex === 0) warrior.lastResult = mod(src.register[sf], state.settings.coreSize);
+          else pSpace[pIndex] = mod(src.register[sf], state.settings.coreSize);
         });
         queuePush(state, warriorId, nextAddr);
         summary = 'guarda en P-space';
@@ -849,6 +846,7 @@
       state.message = `[${executed.cycle}] ${executed.warrior} @${executed.ip}: ${executed.summary}`;
     }
 
+    if (state.halted) state.warriors.forEach(w => { w.lastResult = state.queues[w.id].length ? (state.winner === 'Empate' ? 2 : 1) : 0; });
     return state;
   }
 
@@ -862,6 +860,8 @@
 
   const api = {
     DEFAULT_SETTINGS,
+    seededRandom,
+    validateSettings,
     compileWarrior,
     createBattle,
     stepBattle,
