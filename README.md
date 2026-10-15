@@ -43,6 +43,38 @@ La nota es `round(1000 × (victorias + empates / 2) / combates)`, entre 0 y 1.00
 
 `blocks.js` contiene el modelo de bloques, `rating.js` el protocolo de evaluación, `rating-worker.js` su entrada independiente y `workshop.js` el taller y laboratorio compartido. `trace:false` omite el historial y las marcas visuales en los combates de evaluación; las pruebas comprueban que conserva memoria, colas, P-space y resultados. El ensayo reutiliza las mismas operaciones del motor y no introduce una implementación alternativa de las instrucciones.
 
+## Puzles y banco de la forja · 1.4.0
+
+El generador diario anterior tenía cinco familias con un espacio pequeño de parámetros; un ejercicio tenía siempre la misma respuesta. Se conserva para los ejercicios de las lecciones y el entrenamiento antiguo. Los tres retos diarios usan ahora **doce mecánicas**: copia de campos, suma, resta, multiplicación modular, bombardeo directo, salto a un refugio, dos procesos, comparación, direccionamiento indirecto, DJN, P-space y campos cruzados.
+
+Cada fecha válida entre los años 0001 y 9999 y cada uno de sus tres turnos diarios se asigna a una coordenada diferente mediante una permutación entera inyectiva. Sus dos componentes participan en la construcción del programa o en su objetivo: no es simplemente un identificador diferente sobre un ejercicio idéntico. Se generan la disposición, los operandos, el objetivo, la respuesta recomendada, la pista y su explicación. El generador ejecuta esa respuesta en el motor antes de admitir el reto. Se comprueba el estado resultante, no solo la coincidencia con un número guardado; las respuestas alternativas que cumplen el objetivo también son válidas. La fecha depende de Europe/Madrid, con cambio automático a medianoche y reproducción estable al volver al archivo. Los identificadores v2 evitan mezclar soluciones antiguas con los nuevos problemas.
+
+### Cincuenta guerreros nuevos
+
+La biblioteca conserva los doce originales y añade **50 guerreros de la forja** con nombres épicos en minúsculas y autoría asignada de forma pseudoaleatoria y estable a Pascal o Sara. Cada instrucción y directiva tiene un comentario en castellano. Hay replicadores iniciales, centinelas, bombarderos acotados, barridos, escáneres, bombarderos rápidos, memoria privada, estrategias con dos procesos y replicadores de asalto. Estos últimos adaptan el patrón de copia del sabio oscuro, cambian su fase de traslado y añaden ataques; su descripción reconoce esa relación.
+
+Los 50 han ejecutado 500.000 pasos propios en ensayos sin rival, con núcleos de 800 y 8.000 celdas y un máximo de 256 procesos. Ninguno perdió todos sus procesos. También se prueban con los valores predeterminados del motor y su límite mayor de procesos. Esto describe el intervalo y las reglas comprobadas, no una prueba de supervivencia infinita bajo cualquier configuración. Algunas estrategias exigen que el tamaño del núcleo sea divisible por su salto; esas condiciones están en `;assert`. Cuatro requieren permitir P-space en los torneos.
+
+Cada guerrero tiene 20 partidas medidas contra el sabio oscuro, en diez pares con posiciones comunes y primer turno alterno, con las reglas de combate OGUN-2. Las tarjetas muestran victorias, empates y derrotas reales. Hay victorias verificadas en el banco; por ejemplo, «nexo del apocalipsis» obtuvo 1 victoria, 19 empates y 0 derrotas en esta batería. No se afirma que un guerrero venza siempre a ese rival. El filtro «Con victorias ante el sabio» facilita encontrar los resultados positivos.
+
+Los fuentes `.red` están en `warriors/forja/`. `warriors/forja-validation.json` contiene parámetros, posiciones, semillas, turnos y resultados de las 1.000 partidas, además de los ensayos y los hashes SHA-256 de sus fuentes. Las pruebas reproducen las victorias con el motor. `node scripts/generate-bank.cjs --verify` reconstruye el banco y vuelve a ejecutar sus verificaciones; se conserva la autoría asignada por la semilla. El fichero data.js incluye la colección para que la página y los Workers compartan exactamente el mismo banco, sin descargas adicionales durante una evaluación.
+
+### Biblioteca, evaluación y torneos grandes
+
+La biblioteca se pagina en grupos de doce y filtra por nombre, estrategia, nivel, colección y autoría. Cada guerrero puede descargarse como `.red`, cargarse en A/B o abrirse directamente en bloques. Los comentarios se conservan al convertirlo.
+
+La evaluación compartida de código y bloques pasa a **OGUN-2**, con 10 partidas contra cada uno de los 62 guerreros incluidos: **620 combates**. La fórmula y las reglas de combate permanecen; cambia la batería y, por tanto, su versión. Las notas OGUN-1 no deben compararse directamente con OGUN-2. Los rivales personales siguen recibiendo diez combates separados sin alterar esa nota.
+
+Los seis formatos de torneo admiten de 2 a 64 participantes. Los cuadros y las tablas se desplazan dentro de regiones delimitadas, y se pueden buscar participantes o añadir el banco compatible de una vez. La selección de biblioteca se conserva durante la sesión. Las pruebas completan torneos con los cincuenta guerreros en todos los formatos, incluida una liga de 1.225 duelos, y comprueban un cuadro completo de 64. La recuperación admite el número de resultados de esas ligas.
+
+### Anuncios con confirmación
+
+Por defecto, el cartel de victoria, empate o final de torneo espera a **Continuar**. No lo cierran el tiempo, Escape ni el fondo, y la emisión del torneo se detiene mientras está abierto. En Personalización puede desactivarse esa espera y usarse cierre automático o duración cero. Las preferencias antiguas que no tenían esta opción adoptan la espera manual.
+
+Se añaden Nova del núcleo, Forja de acero y Corona de victoria a los efectos existentes, con ritmo, intensidad, partículas, brillo, tamaño, fondo y colores configurables. La reducción de movimiento conserva una presentación estática. Todos estos ajustes se guardan en las cookies de sesión.
+
+La batería de la versión 1.4.0 contiene 621 pruebas. Se comprueban las soluciones y la no repetición del programa/objetivo durante un año completo, fechas inválidas y cambios horarios de Madrid, código y bloques de los cincuenta guerreros, supervivencia, reproducción de las victorias, los seis formatos grandes, recuperación, la evaluación de 620 combates en un hilo separado y el bloqueo de la emisión hasta confirmar un resultado. Los flujos de interfaz se prueban con el arnés DOM: no constituyen revisión visual de navegador. Este entorno no dispone del control de navegador necesario para esa revisión.
+
 ## Motor
 
 Ambos puntos de carga se sortean independientemente mediante una distribución válida de distancias circulares. Se evita el solapamiento, incluso al envolver el límite del núcleo. Una semilla reproduce posiciones, turno inicial y resultado. El primer turno se sortea o se puede elegir.

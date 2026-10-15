@@ -4,10 +4,10 @@ const E=globalThis.CoreWarEngine;
 const FORMATS=['swiss','league','knockout','random'];
 const DEFAULTS={format:'swiss',rounds:4,swissRounds:3,winPoints:3,drawPoints:1,lossPoints:0,byePoints:3,standings:'buchholz',knockoutTie:'extra',extraPairs:2,allowPSpace:false,banned:'',drawPolicy:'draw'};
 function options(raw={},count){const o={...DEFAULTS,...raw};if(!FORMATS.includes(o.format))throw new Error('Formato de torneo inválido.');
- for(const [k,min,max]of [['rounds',2,16],['swissRounds',1,32],['winPoints',0,100],['drawPoints',0,100],['lossPoints',0,100],['byePoints',0,100],['extraPairs',0,8]])if(!Number.isInteger(o[k])||o[k]<min||o[k]>max)throw new Error(`Regla inválida: ${k}.`);
+ for(const [k,min,max]of [['rounds',2,16],['swissRounds',1,64],['winPoints',0,100],['drawPoints',0,100],['lossPoints',0,100],['byePoints',0,100],['extraPairs',0,8]])if(!Number.isInteger(o[k])||o[k]<min||o[k]>max)throw new Error(`Regla inválida: ${k}.`);
  if(o.rounds%2)throw new Error('Usa un número par de partidas por duelo para alternar el primer turno.');
  if(!['buchholz','sonneborn','wins','name'].includes(o.standings)||!['seeded','extra'].includes(o.knockoutTie)||!['draw','territory','processes'].includes(o.drawPolicy))throw new Error('Desempate inválido.');
- if(count!==undefined){if(count<2||count>32)throw new Error('Selecciona entre 2 y 32 guerreros.');if(['swiss','random'].includes(o.format)&&o.swissRounds>(count%2?count:count-1))throw new Error(`Con ${count} guerreros puedes jugar hasta ${count%2?count:count-1} jornadas.`);}
+ if(count!==undefined){if(count<2||count>64)throw new Error('Selecciona entre 2 y 64 guerreros.');if(['swiss','random'].includes(o.format)&&o.swissRounds>(count%2?count:count-1))throw new Error(`Con ${count} guerreros puedes jugar hasta ${count%2?count:count-1} jornadas.`);}
  const banned=String(o.banned||'').toUpperCase().split(/[\s,;]+/).filter(Boolean);const ops=['DAT','MOV','ADD','SUB','MUL','DIV','MOD','JMP','JMZ','JMN','DJN','SEQ','CMP','SNE','SLT','SPL','NOP','LDP','STP'];
  if(banned.some(op=>!ops.includes(op)))throw new Error('La lista de instrucciones prohibidas contiene un nombre desconocido.');o.banned=[...new Set(banned)].join(', ');o.allowPSpace=!!o.allowPSpace;return o;
 }
