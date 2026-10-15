@@ -457,7 +457,7 @@
   }
 
   function recordTouch(state, addr, type, warriorId) {
-    if (addr == null) return;
+    if (addr == null || state.settings.trace === false) return;
     state.visual.lastTouchedCycle[addr] = state.cycle;
     if (type === 'exec') state.visual.lastExecBy[addr] = warriorId;
     if (type === 'read') state.visual.lastReadBy[addr] = warriorId;
@@ -823,13 +823,16 @@
     };
 
     state.lastStep = stepInfo;
-    state.debugLog.unshift(stepInfo);
-    if (state.debugLog.length > 200) state.debugLog.pop();
+    if (state.settings.trace !== false) {
+      state.debugLog.unshift(stepInfo);
+      if (state.debugLog.length > 200) state.debugLog.pop();
+    }
     return stepInfo;
   }
 
   function stepBattle(inputState) {
     const state = inputState;
+    if (state.sandbox) return stepSandbox(state);
     if (state.halted) return state;
 
     let tries = 0;
@@ -854,6 +857,37 @@
     }
 
     if (state.halted) state.warriors.forEach(w => { w.lastResult = state.queues[w.id].length ? (state.winner === 'Empate' ? 2 : 1) : 0; });
+    return state;
+  }
+
+  // A solo memory contains exactly one warrior: no hidden opponent or foreign cells.
+  function createSandbox(compiled, userSettings = {}) {
+    const settings = {...DEFAULT_SETTINGS, ...userSettings, seed: 'ensayo-fijo', firstWarrior: 'A'};
+    validateSettings(settings);
+    if (!compiled || !compiled.length || compiled.length > settings.coreSize || compiled.length > settings.maxLength) throw new Error('El guerrero no cabe en el ensayo.');
+    const core = Array.from({length: settings.coreSize}, makeEmptyInstruction);
+    compiled.program.forEach((inst, i) => { core[i] = {...cloneInstruction(inst), owner: 'A'}; });
+    const warrior = {id: 'A', name: compiled.metadata.name, author: compiled.metadata.author, strategy: compiled.metadata.strategy, pin: compiled.pin, pSpace: Array.from({length: settings.pSpaceSize}, (_, i) => i === 0 ? settings.coreSize - 1 : 0), lastResult: settings.coreSize - 1, start: 0, entry: mod(compiled.entryPoint, settings.coreSize), program: compiled.program, length: compiled.length};
+    const state = {settings, core, warriors: [warrior], queues: {A: [warrior.entry], B: []}, cycle: 0, turn: 0, halted: false, winner: null, winReason: '', message: 'Ensayo preparado.', version: 0, lastStep: null, debugLog: [], sandbox: true, visual: {lastExecBy: new Array(settings.coreSize).fill(null), lastReadBy: new Array(settings.coreSize).fill(null), lastWriteBy: new Array(settings.coreSize).fill(null), lastTouchedCycle: new Array(settings.coreSize).fill(-1)}};
+    return state;
+  }
+
+  function stepSandbox(state) {
+    if (!state.sandbox) throw new Error('La memoria no es un ensayo aislado.');
+    if (state.halted) return state;
+    const step = executeWarriorTurn(state, 'A');
+    state.cycle++;
+    state.version++;
+    state.message = step ? `@${step.ip}: ${step.summary}` : '';
+    if (!state.queues.A.length) {
+      state.halted = true;
+      state.winner = null;
+      state.winReason = 'Autodestrucción: no queda ningún proceso vivo en el ensayo aislado.';
+    } else if (state.cycle >= state.settings.maxCycles) {
+      state.halted = true;
+      state.winner = 'A';
+      state.winReason = 'Sobrevive al límite del ensayo aislado.';
+    }
     return state;
   }
 
@@ -883,6 +917,8 @@
     compileWarrior,
     createBattle,
     stepBattle,
+    createSandbox,
+    stepSandbox,
     runSteps,
     formatInstruction,
     cloneInstruction,
