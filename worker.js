@@ -1,4 +1,4 @@
-importScripts('engine.js?v=1.1.1','competition.js?v=1.1.1');
+importScripts('engine.js?v=1.2.0','competition.js?v=1.2.0');
 self.onmessage=({data})=>{
  try{
  const {entries,seed}=data,E=CoreWarEngine,C=OgunCompetition,o=C.options({...data.options,format:data.format||data.options?.format||'league',rounds:data.rounds||data.options?.rounds||4},entries.length),settings={...E.DEFAULT_SETTINGS,...data.settings,drawPolicy:o.drawPolicy};
